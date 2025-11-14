@@ -1,6 +1,7 @@
 package main
 
 import (
+	"darkroom/pkg/rate"
 	"errors"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -16,6 +17,7 @@ func main() {
 	rootCmd := &cobra.Command{}
 	rootCmd.AddCommand(split)
 	rootCmd.AddCommand(pick)
+	rootCmd.AddCommand(rate.StoreRate)
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalln(err)
 	}
@@ -127,7 +129,7 @@ func moveIf(p string, ext string, dest string) error {
 }
 
 func createDir(dir string) error {
-	err := os.Mkdir(dir, os.ModeDir)
+	err := os.Mkdir(dir, fs.ModeDir|fs.ModePerm)
 	if err != nil {
 		var pErr *fs.PathError
 		if errors.As(err, &pErr) && errors.Is(pErr.Err, fs.ErrExist) {
