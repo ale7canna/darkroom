@@ -1,6 +1,7 @@
 package rate
 
 import (
+	"darkroom/pkg/database"
 	"errors"
 	"fmt"
 	"github.com/spf13/cobra"
@@ -15,25 +16,39 @@ import (
 var StoreRate = &cobra.Command{
 	Use:  "store-rate",
 	Args: cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := args[0]
-		infos, err := os.ReadDir(dir)
+		_, err := database.InitClient()
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
-		rates := make(map[string]int)
-		for _, info := range infos {
-			p := path.Join(dir, info.Name())
-			rate, err := getPictureRate(p)
-			if err != nil {
-				log.Fatalln(err)
-			}
-			rates[path.Base(p)] = rate
+		rates, err := readRates(dir)
+		if err != nil {
+			return err
 		}
 		for p, rate := range rates {
 			log.Println(p, rate)
 		}
+		return nil
 	},
+}
+
+func readRates(dir string) (map[string]int, error) {
+	rates := make(map[string]int)
+	infos, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, info := range infos {
+		p := path.Join(dir, info.Name())
+		rate, err := getPictureRate(p)
+		if err != nil {
+			return nil, err
+		}
+		rates[path.Base(p)] = rate
+	}
+	return rates, nil
 }
 
 func getPictureRate(path string) (int, error) {
