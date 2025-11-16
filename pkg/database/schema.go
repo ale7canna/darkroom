@@ -3,7 +3,7 @@ package database
 var schemaDefinition = `
 create table if not exists picture (
     id integer primary key autoincrement,
-    name text not null,
+    name text not null unique,
     path text not null,
     directory text not null
 );
