@@ -4,13 +4,14 @@ import (
 	"darkroom/pkg/rate"
 	"errors"
 	"fmt"
-	"github.com/spf13/cobra"
 	"io/fs"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/spf13/cobra"
 )
 
 func main() {
@@ -18,6 +19,7 @@ func main() {
 	rootCmd.AddCommand(split)
 	rootCmd.AddCommand(pick)
 	rootCmd.AddCommand(rate.StoreRate)
+	rootCmd.AddCommand(rate.ResetRate)
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalln(err)
 	}

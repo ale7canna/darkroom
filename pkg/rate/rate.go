@@ -1,10 +1,8 @@
 package rate
 
 import (
-	"darkroom/pkg/database"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path"
 	"slices"
@@ -13,39 +11,13 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
 )
 
+const ratingAttrKey = "user.baloo.rating"
+
 type rates struct {
 	db *sqlx.DB
-}
-
-var StoreRate = &cobra.Command{
-	Use:  "store-rate",
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := args[0]
-		db, err := database.InitClient()
-		if err != nil {
-			return err
-		}
-		rates := &rates{
-			db: db,
-		}
-		picRates, err := rates.read(dir)
-		if err != nil {
-			return err
-		}
-		picturesWithStats, err := rates.storeAndUpdateStats(picRates)
-		if err != nil {
-			return err
-		}
-		for _, p := range picturesWithStats {
-			log.Println(p)
-		}
-		return nil
-	},
 }
 
 type PicWithRate struct {
@@ -71,7 +43,7 @@ func (r *rates) storeAndUpdateStats(rates map[string]int) ([]*PicWithRate, error
 		result = append(result, stat)
 	}
 	slices.SortFunc(result, func(a, b *PicWithRate) int {
-		if a.AvgRate >= b.AvgRate {
+		if a.AvgRate <= b.AvgRate {
 			return 1
 		} else {
 			return -1
@@ -111,9 +83,9 @@ type dbPicStats struct {
 }
 
 func (r *rates) storeAndUpdatePic(pic string, rate int) (*PicWithRate, error) {
-	p := &dbPicture{}
 	dir := path.Dir(pic)
 	name := path.Base(pic)
+	p := &dbPicture{}
 	err := r.db.Get(p, `
 insert into picture (name, path, directory) values (?, ?, ?)
 on conflict(name) do update set
@@ -149,9 +121,25 @@ returning avg_rating, rate_count;`, p.Id)
 	}, nil
 }
 
+func (r *rates) reset(dir string) error {
+	infos, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, info := range infos {
+		p := path.Join(dir, info.Name())
+		err := resetPictureRate(p)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func getPictureRate(path string) (int, error) {
 	buffer := make([]byte, 1024)
-	attrSize, err := unix.Getxattr(path, "user.baloo.rating", buffer)
+	attrSize, err := unix.Getxattr(path, ratingAttrKey, buffer)
 	if err != nil {
 		if errors.Is(err, unix.ENODATA) {
 			return 0, errors.New(fmt.Sprintf("file %s has no rating", path))
@@ -161,4 +149,8 @@ func getPictureRate(path string) (int, error) {
 
 	val := strings.TrimSpace(string(buffer[:attrSize]))
 	return strconv.Atoi(val)
+}
+
+func resetPictureRate(path string) error {
+	return unix.Removexattr(path, ratingAttrKey)
 }
