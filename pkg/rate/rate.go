@@ -4,14 +4,17 @@ import (
 	"darkroom/pkg/database"
 	"errors"
 	"fmt"
-	"github.com/jmoiron/sqlx"
-	"github.com/spf13/cobra"
-	"golang.org/x/sys/unix"
 	"log"
 	"os"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/jmoiron/sqlx"
+	"github.com/spf13/cobra"
+	"golang.org/x/sys/unix"
 )
 
 type rates struct {
@@ -67,6 +70,13 @@ func (r *rates) storeAndUpdateStats(rates map[string]int) ([]*PicWithRate, error
 		}
 		result = append(result, stat)
 	}
+	slices.SortFunc(result, func(a, b *PicWithRate) int {
+		if a.AvgRate >= b.AvgRate {
+			return 1
+		} else {
+			return -1
+		}
+	})
 	return result, nil
 }
 
@@ -88,15 +98,20 @@ func (*rates) read(dir string) (map[string]int, error) {
 	return rates, nil
 }
 
-type Picture struct {
+type dbPicture struct {
 	Id        int    `db:"id"`
 	Name      string `db:"name"`
 	Path      string `db:"path"`
 	Directory string `db:"directory"`
 }
 
+type dbPicStats struct {
+	AvgRating float32 `db:"avg_rating"`
+	RateCount int     `db:"rate_count"`
+}
+
 func (r *rates) storeAndUpdatePic(pic string, rate int) (*PicWithRate, error) {
-	p := &Picture{}
+	p := &dbPicture{}
 	dir := path.Dir(pic)
 	name := path.Base(pic)
 	err := r.db.Get(p, `
@@ -108,7 +123,30 @@ returning *`, name, pic, dir)
 	if err != nil {
 		return nil, err
 	}
-	return &PicWithRate{}, nil
+
+	_, err = r.db.Exec(`insert into picture_rating (picture_id, rating, created_at_ts) values (?, ?, ?)`,
+		p.Id, rate, time.Now().UnixMilli())
+	if err != nil {
+		return nil, err
+	}
+
+	stats := &dbPicStats{}
+	err = r.db.Get(stats, `
+insert into picture_stats (picture_id, avg_rating, rate_count)
+select picture_id, avg(rating) as avg_rating, count(*) as rate_count from picture_rating where picture_id = ?
+group by picture_id
+on conflict(picture_id) do update set
+	avg_rating = excluded.avg_rating,
+	rate_count = excluded.rate_count
+returning avg_rating, rate_count;`, p.Id)
+	if err != nil {
+		return nil, err
+	}
+	return &PicWithRate{
+		PicName:   p.Name,
+		AvgRate:   stats.AvgRating,
+		RateCount: stats.RateCount,
+	}, nil
 }
 
 func getPictureRate(path string) (int, error) {

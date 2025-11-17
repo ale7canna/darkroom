@@ -19,8 +19,9 @@ create table if not exists picture_rating (
 
 create table if not exists picture_stats (
     id integer primary key autoincrement,
-    picture_id integer not null,
+    picture_id integer not null unique,
     avg_rating float not null,
+    rate_count integer not null,
     
     foreign key (picture_id) references picture(id)
 );
