@@ -50,3 +50,18 @@ var ResetRate = &cobra.Command{
 		return nil
 	},
 }
+
+var PickRated = &cobra.Command{
+	Use:  "pick-rated",
+	Args: cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		dir := args[0]
+		output := args[1]
+		rates := &rates{}
+		err := rates.pickRated(dir, output)
+		if err != nil {
+			return err
+		}
+		return nil
+	},
+}

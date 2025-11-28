@@ -20,6 +20,7 @@ func main() {
 	rootCmd.AddCommand(pick)
 	rootCmd.AddCommand(rate.StoreRate)
 	rootCmd.AddCommand(rate.ResetRate)
+	rootCmd.AddCommand(rate.PickRated)
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatalln(err)
 	}

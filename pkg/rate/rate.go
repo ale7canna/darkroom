@@ -2,7 +2,6 @@ package rate
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path"
 	"slices"
@@ -137,12 +136,47 @@ func (r *rates) reset(dir string) error {
 	return nil
 }
 
+func (r *rates) pickRated(dir string, output string) error {
+	stat, err := os.Stat(output)
+	if !os.IsNotExist(err) || stat != nil {
+		return errors.New("output directory already exists")
+	}
+	infos, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	var toPick []string
+	for _, info := range infos {
+		p := path.Join(dir, info.Name())
+		_, err = getPictureRate(p)
+		if err != nil {
+			if !errors.As(err, new(noRateError)) {
+				return err
+			}
+			continue
+		}
+		toPick = append(toPick, p)
+	}
+
+	err = os.Mkdir(output, 0755)
+	if err != nil {
+		return err
+	}
+	for _, p := range toPick {
+		err = os.Rename(p, path.Join(output, path.Base(p)))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func getPictureRate(path string) (int, error) {
 	buffer := make([]byte, 1024)
 	attrSize, err := unix.Getxattr(path, ratingAttrKey, buffer)
 	if err != nil {
 		if errors.Is(err, unix.ENODATA) {
-			return 0, errors.New(fmt.Sprintf("file %s has no rating", path))
+			return 0, noRate(path)
 		}
 		return 0, err
 	}
