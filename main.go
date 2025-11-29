@@ -29,31 +29,59 @@ func main() {
 var pick = &cobra.Command{
 	Use:  "pick",
 	Args: cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := args[0]
 		err := makeDirs(dir)
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
-		infos, err := os.ReadDir(path.Join(dir, "to_process_jpg"))
+		err = linkNEFFromJPG(dir, "to_process_jpg", "original_raw", "to_process_raw")
 		if err != nil {
-			log.Fatalln(err)
+			return err
 		}
-		for _, info := range infos {
-			p := path.Join(dir, "original_raw", info.Name())
-			log.Println(p)
-			rawFile := strings.Replace(p, ".JPG", ".NEF", 1)
-			err = os.Link(rawFile, path.Join(dir, "to_process_raw", filepath.Base(rawFile)))
-			if err != nil {
-				var fsErr *os.LinkError
-				if errors.As(err, &fsErr) && errors.Is(fsErr.Err, fs.ErrExist) {
-					log.Println(fmt.Sprintf("file %s already linked", filepath.Base(rawFile)))
-				}
+		log.Println("completed")
+		return nil
+	},
+}
+
+func linkNEFFromJPG(basePath string, baseDir string, nefSource string, nefTarget string) error {
+	infos, err := os.ReadDir(path.Join(basePath, baseDir))
+	if err != nil {
+		return err
+	}
+	err = createDir(path.Join(basePath, nefTarget))
+	if err != nil {
+		return err
+	}
+	var directories []string
+	for _, info := range infos {
+		if info.IsDir() {
+			directories = append(directories, info.Name())
+			continue
+		}
+		if filepath.Ext(info.Name()) != ".JPG" {
+			log.Println(fmt.Sprintf("skipping %s", info.Name()))
+			continue
+		}
+		p := path.Join(basePath, nefSource, info.Name())
+		rawFile := strings.Replace(p, ".JPG", ".NEF", 1)
+		err = os.Link(rawFile, path.Join(basePath, nefTarget, filepath.Base(rawFile)))
+		if err != nil {
+			var fsErr *os.LinkError
+			if errors.As(err, &fsErr) && errors.Is(fsErr.Err, fs.ErrExist) {
+				log.Println(fmt.Sprintf("file %s already linked", filepath.Base(rawFile)))
+			} else {
+				log.Println(fmt.Sprintf("error linking %s. err: %s", filepath.Base(rawFile), err))
 			}
 		}
-
-		log.Println("completed")
-	},
+	}
+	for _, dir := range directories {
+		err = linkNEFFromJPG(basePath, path.Join(baseDir, dir), nefSource, path.Join(nefTarget, path.Base(dir)))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 var split = &cobra.Command{
